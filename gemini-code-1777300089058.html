@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thailand Reiseplaner 2026</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #00796b;
+            --accent: #ff5722;
+            --dark: #263238;
+            --light: #f8fafc;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background-color: var(--light); 
+            color: var(--dark);
+        }
+
+        /* Hero Bereich */
+        .hero {
+            background: linear-gradient(135deg, rgba(0,121,107,0.9), rgba(0,77,64,0.8)), 
+                        url('https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?q=80&w=1439&auto=format&fit=crop');
+            background-size: cover;
+            background-position: center;
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .container { 
+            max-width: 1000px; 
+            margin: 20px auto; 
+            padding: 0 15px; 
+        }
+
+        /* Die Karte MUSS eine feste Höhe haben */
+        #map-container {
+            background: white;
+            padding: 10px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+        }
+
+        #map { 
+            height: 450px; 
+            width: 100%; 
+            border-radius: 12px;
+            z-index: 1;
+        }
+
+        /* Eingabe-Bereich */
+        .planner-card {
+            background: white;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+
+        .input-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr auto;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        input { 
+            padding: 14px; 
+            border: 2px solid #e2e8f0; 
+            border-radius: 10px; 
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus { border-color: var(--primary); }
+
+        button { 
+            padding: 14px 28px; 
+            background-color: var(--primary); 
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            cursor: pointer; 
+            font-weight: 700;
+            transition: all 0.2s;
+        }
+
+        button:hover { background-color: #004d40; transform: translateY(-1px); }
+
+        /* Tabelle */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { text-align: left; padding: 12px; color: #64748b; font-size: 14px; border-bottom: 2px solid #f1f5f9; }
+        td { padding: 16px 12px; border-bottom: 1px solid #f1f5f9; }
+
+        .total-box {
+            margin-top: 25px;
+            padding: 20px;
+            background: #e0f2f1;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .total-amount { font-size: 24px; font-weight: 700; color: var(--primary); }
+
+        .delete-btn {
+            background: #fee2e2;
+            color: #ef4444;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+        .delete-btn:hover { background: #fecaca; }
+
+        @media (max-width: 650px) {
+            .input-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="hero">
+    <h1>Meine Thailand Reise 2026 🌴</h1>
+    <p>Ziele planen, Route checken, Budget im Blick</p>
+</div>
+
+<div class="container">
+    <div id="map-container">
+        <div id="map"></div>
+    </div>
+
+    <div class="planner-card">
+        <div class="input-row">
+            <input type="text" id="destination" placeholder="Ort (z.B. Bangkok, Phuket...)">
+            <input type="number" id="cost" placeholder="Kosten in €">
+            <button onclick="addItem()">Hinzufügen</button>
+        </div>
+
+        <table id="planTable">
+            <thead>
+                <tr>
+                    <th>ORT</th>
+                    <th>KOSTEN</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+
+        <div class="total-box">
+            <span style="font-weight: 600;">Voraussichtliche Gesamtkosten:</span>
+            <span class="total-amount" id="totalCostDisplay">0 €</span>
+        </div>
+        
+        <button onclick="clearAll()" style="background: transparent; color: #94a3b8; margin-top: 20px; padding: 0; font-size: 12px;">Plan komplett löschen</button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+
+<script>
+    // 1. Karte initialisieren
+    var map = L.map('map').setView([13.7563, 100.5018], 5);
+
+    // 2. Karten-Kacheln laden (Standard OpenStreetMap für maximale Kompatibilität)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // WICHTIG: Fix für Karten-Rendering
+    setTimeout(function(){ map.invalidateSize()}, 400);
+
+    let travelData = JSON.parse(localStorage.getItem('thailandTripFinal')) || [];
+    let markers = [];
+
+    function render() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        let total = 0;
+
+        // Alte Marker entfernen
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+
+        travelData.forEach((item, index) => {
+            // Tabelle füllen
+            const row = tbody.insertRow();
+            row.innerHTML = `
+                <td style="font-weight:600">${item.name}</td>
+                <td>${item.price} €</td>
+                <td style="text-align:right"><button class="delete-btn" onclick="removeItem(${index})">Löschen</button></td>
+            `;
+            total += item.price;
+
+            // Marker setzen
+            const marker = L.marker([item.lat, item.lon]).addTo(map)
+                .bindPopup(`<b>${item.name}</b><br>${item.price} €`);
+            markers.push(marker);
+        });
+
+        document.getElementById('totalCostDisplay').innerText = total + " €";
+
+        // Karte automatisch anpassen, wenn Marker da sind
+        if (markers.length > 0) {
+            const group = new L.featureGroup(markers);
+            map.fitBounds(group.getBounds().pad(0.1));
+        }
+        
+        localStorage.setItem('thailandTripFinal', JSON.stringify(travelData));
+    }
+
+    async function addItem() {
+        const destInput = document.getElementById('destination');
+        const costInput = document.getElementById('cost');
+        const name = destInput.value;
+        const price = parseFloat(costInput.value);
+
+        if (!name || isNaN(price)) return alert("Bitte Ort und Kosten eingeben!");
+
+        // Ort suchen (Nominatim API)
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(name)}+Thailand`);
+            const results = await response.json();
+
+            if (results.length > 0) {
+                travelData.push({
+                    name: results[0].display_name.split(',')[0],
+                    price: price,
+                    lat: results[0].lat,
+                    lon: results[0].lon
+                });
+                destInput.value = '';
+                costInput.value = '';
+                render();
+            } else {
+                alert("Ort nicht gefunden. Versuche es mit einer bekannteren Schreibweise.");
+            }
+        } catch (e) {
+            alert("Fehler bei der Verbindung zur Karte.");
+        }
+    }
+
+    function removeItem(index) {
+        travelData.splice(index, 1);
+        render();
+    }
+
+    function clearAll() {
+        if(confirm("Alles löschen?")) {
+            travelData = [];
+            render();
+        }
+    }
+
+    // Start-Render
+    render();
+</script>
+
+</body>
+</html>
